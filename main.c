@@ -224,9 +224,9 @@ static const DACConversionGroup dacgrpcfg1 = {
 };
 
 /*
- * GPT1 configuration.
+ * GPT6 configuration.
  */
-static const GPTConfig gpt1cfg1 = {
+static const GPTConfig gpt6cfg1 = {
   .frequency    = 1000000U,
   .callback     = NULL,
   .cr2          = TIM_CR2_MMS_1,    /* MMS = 010 = TRGO on Update Event.    */
@@ -308,13 +308,13 @@ int main(void) {
   /*
    * Starting GPT1 driver, it is used for triggering the DAC.
    */
-  gptStart(&GPTD1, &gpt1cfg1);
+  gptStart(&GPTD6, &gpt6cfg1);
 
   /*
    * Starting a continuous conversion.
    */
   dacStartConversion(&DACD1, &dacgrpcfg1, dac_buffer, DAC_BUFFER_SIZE);
-  gptStartContinuous(&GPTD1, 2U);
+  gptStartContinuous(&GPTD6, 2U);
 
   /*
    * Creates the blinker thread.
