@@ -138,6 +138,12 @@ static const ShellConfig shell_cfg1 = {
 };
 
 /*===========================================================================*/
+/* Serial Configuration                                                        */
+/*===========================================================================*/
+
+BaseSequentialStream *uart1 = (BaseSequentialStream *)&SD1;
+
+/*===========================================================================*/
 /* DAC                                                                       */
 /*===========================================================================*/
 
@@ -194,10 +200,6 @@ static void end_cb1(DACDriver *dacp, const dacsample_t *buffer, size_t n) {
   else {
     ny += n;
   }
-
-  if ((nz % 1000) == 0) {
-    palTogglePad(GPIOB, 12);
-  }
 }
 
 /*
@@ -234,12 +236,44 @@ static const GPTConfig gpt6cfg1 = {
 };
 
 /*===========================================================================*/
+/* ADC code.                                                                 */
+/*===========================================================================*/
+
+#define ADC_GRP1_NUM_CHANNELS   2
+#define ADC_GRP1_BUF_DEPTH      8
+
+static adcsample_t samples1[ADC_GRP1_NUM_CHANNELS * ADC_GRP1_BUF_DEPTH];
+
+/*
+ * Called on an error in ADC driver.
+ */
+static void adcerrorcallback(ADCDriver *adcp, adcerror_t err) {
+  (void)adcp;
+  (void)err;
+}
+
+/*
+ * ADC conversion group.
+ * Mode:        Linear buffer, 8 samples of 1 channel, SW triggered.
+ * Channels:    IN10.
+ */
+static const ADCConversionGroup adcgrpcfg1 = {
+  FALSE,
+  ADC_GRP1_NUM_CHANNELS,
+  NULL,
+  adcerrorcallback,
+  ADC_CFGR1_CONT | ADC_CFGR1_RES_12BIT,             /* CFGR1 */
+  ADC_TR(0, 0),                                     /* TR */
+  ADC_SMPR_SMP_1P5,                                 /* SMPR */
+  ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL2             /* CHSELR */
+};
+
+/*===========================================================================*/
 /* Generic code.                                                             */
 /*===========================================================================*/
 
 /*
  * Red LED blinker thread, times are in milliseconds.
- */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(Thread1, arg) {
 
@@ -255,6 +289,7 @@ static THD_FUNCTION(Thread1, arg) {
     chThdSleepMilliseconds(time);
   }
 }
+ */
 
 /*
  * Application entry point.
@@ -296,7 +331,16 @@ int main(void) {
   palSetPadMode(GPIOB, 12, PAL_MODE_OUTPUT_PUSHPULL);
   palSetPadMode(GPIOB, 13, PAL_MODE_OUTPUT_PUSHPULL);
   palSetPadMode(GPIOB, 14, PAL_MODE_OUTPUT_PUSHPULL);
-  palClearPad(GPIOB, 12);
+  palSetPad(GPIOB, 12);
+  palSetPad(GPIOB, 13);
+  palClearPad(GPIOB, 14);
+  
+  /*
+   * Activates the serial driver 1, PA9 and PA10 are routed to USART1.
+   */
+  sdStart(&SD1, NULL);
+  palSetPadMode(GPIOB, 6, PAL_MODE_ALTERNATE(0)); /* USART1 TX.       */
+  palSetPadMode(GPIOB, 7, PAL_MODE_ALTERNATE(0)); /* USART1 RX.       */
 
   /*
    * Starting DAC1 driver, setting up the output pin as analog as suggested
@@ -317,9 +361,20 @@ int main(void) {
   gptStartContinuous(&GPTD6, 2U);
 
   /*
+   * Setting up analog inputs used by the demo.
+   */
+  palSetGroupMode(GPIOA, PAL_PORT_BIT(1) | PAL_PORT_BIT(2),
+                  0, PAL_MODE_INPUT_ANALOG);
+  
+  /*
+   * Activates the ADC1 driver.
+   */
+  adcStart(&ADCD1, NULL);
+
+  /*
    * Creates the blinker thread.
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
+  //chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
 
   /*
    * Normal main() thread activity, in this demo it does nothing except
@@ -332,6 +387,8 @@ int main(void) {
       chThdRelease(shelltp);    /* Recovers memory of the previous shell.   */
       shelltp = NULL;           /* Triggers spawning of a new shell.        */
     }
+    adcConvert(&ADCD1, &adcgrpcfg1, samples1, ADC_GRP1_BUF_DEPTH);
+    chprintf(uart1, "ADC values: %d %d\r\n", samples1[0], samples1[1]);
     chThdSleepMilliseconds(1000);
   }
 }
